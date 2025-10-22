@@ -216,7 +216,7 @@ runs:
                     if any('recommendation' in lint for lint in lint_data.get('lints', [])):
                         print(f"❌ pynblint failed for {notebook}")
                         result = 1
-                print(f"✅ {command} finished successfully for {notebook})
+                print(f"✅ {command} finished successfully for {notebook}")
             except subprocess.CalledProcessError:
                 print(f"❌ {command} failed for {notebook}")
                 result = 1
