@@ -85,7 +85,7 @@ runs:
                     with open(notebook, 'r', encoding='utf-8') as f:
                         nb_data = json.load(f)
                 except Exception as e:
-                    print(f"Error reading notebook {notebook}: {e}")
+                    print(f"❌ Error reading notebook {notebook}: {e}")
                     result = 1
                     continue
 
@@ -214,14 +214,14 @@ runs:
                     with open(lint_file, 'r') as f:
                         lint_data = json.load(f)
                     if any('recommendation' in lint for lint in lint_data.get('lints', [])):
-                        print(f"Pynblint failed for {notebook}")
+                        print(f"❌ pynblint failed for {notebook}")
                         result = 1
-
+                print(f"✅ {command} finished successfully for {notebook})
             except subprocess.CalledProcessError:
-                print(f"{command} failed for {notebook}")
+                print(f"❌ {command} failed for {notebook}")
                 result = 1
             except Exception as e:
-                print(f"Error processing {notebook}: {e}")
+                print(f"❌ Error processing {notebook}: {e}")
                 result = 1
 
         sys.exit(result)
