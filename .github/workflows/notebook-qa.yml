@@ -359,11 +359,15 @@ jobs:
                               # Add rows for each cell
                               for row in rows:
                                   cell = row.get('cell', 'N/A')
-                                  # Memory is typically in bytes, convert to MB
-                                  memory_bytes = float(row.get('memory', 0)) if row.get('memory') else 0
-                                  memory_mb = f"{memory_bytes / (1024 * 1024):.2f}"
-                                  # Get execution time
-                                  exec_time = row.get('time', 'N/A')
+                                  # Memory is already in MB from the CSV
+                                  memory_mb = row.get('memory', 'N/A')
+                                  if memory_mb != 'N/A':
+                                      try:
+                                          memory_mb = f"{float(memory_mb):.2f}"
+                                      except ValueError:
+                                          pass
+                                  # Get execution time (column name is 'runtime' in CSV)
+                                  exec_time = row.get('runtime', 'N/A')
                                   if exec_time != 'N/A':
                                       try:
                                           exec_time = f"{float(exec_time):.2f}"
