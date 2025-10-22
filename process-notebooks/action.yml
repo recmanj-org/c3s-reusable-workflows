@@ -25,6 +25,7 @@ runs:
         import sys
 
         from pathlib import Path
+        from ploomber_engine import execute_notebook
 
         command = "${{ inputs.command }}"
         notebooks_json = """${{ inputs.notebooks }}""".strip()
@@ -209,7 +210,22 @@ runs:
                 output_name = notebook_path.stem + ".output" + notebook_path.suffix
                 output_path = Path(output_dir) / output_name
 
-                cmd = ["ploomber-engine", notebook, str(output_path), "--profile-memory"]
+                # Execute notebook with memory profiling and CSV output
+                try:
+                    execute_notebook(
+                        input_path=notebook,
+                        output_path=str(output_path),
+                        profile_memory=True,
+                        save_profiling_data=True
+                    )
+                    print(f"✅ {command} finished successfully for {notebook}")
+                    notebook_results[notebook] = "success"
+                except Exception as e:
+                    print(f"❌ {command} failed for {notebook}: {e}")
+                    notebook_results[notebook] = "failure"
+                    result = 1
+                # Skip subprocess call for execute
+                continue
 
             try:
                 subprocess.run(cmd, check=True)
