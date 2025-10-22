@@ -1,0 +1,263 @@
+name: Notebook QA
+
+on:
+  workflow_call:
+    inputs:
+      notebooks:
+        description: 'Comma-separated list of notebook paths to check (e.g., ./notebook1.ipynb,./folder/notebook2.ipynb). Leave empty to check all notebooks.'
+        required: false
+        type: string
+        default: ''
+
+
+jobs:
+  checks:
+    strategy:
+      matrix:
+        os: [ubuntu-24.04]
+        python-version: [3.13]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash -l {0}
+    env:
+      QA_OUTPUT_DIR: qa_outputs${{ github.run_id }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Conda environment
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: "latest"
+          environment-file: "environment.yml"
+          activate-environment: notebook-qa
+          auto-activate-base: false
+          use-mamba: true
+          channels: conda-forge
+          use-only-tar-bz2: true
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install QA dependencies
+        run: |
+          conda install pip
+          # Pin click to <8.3 to avoid issues with pynblint bool flags
+          pip install nbqa ruff pynblint 'click<8.3' pytest-check-links ploomber-engine psutil matplotlib
+          (sudo apt-get -y update && sudo apt-get -y --no-install-recommends install jq) || (brew update && brew install jq) || choco install jq
+
+      - name: Collect notebooks
+        id: collect_notebooks
+        shell: python
+        env:
+          MANUAL_NOTEBOOKS: ${{ inputs.notebooks }}
+        run: |
+          import json
+          import os
+          import sys
+
+          manual_notebooks = os.environ.get('MANUAL_NOTEBOOKS', '').strip()
+
+          if manual_notebooks:
+              # Parse comma-separated notebook paths
+              notebooks = [nb.strip() for nb in manual_notebooks.split(',') if nb.strip()]
+
+              # Validate that all specified notebooks exist
+              missing_notebooks = []
+              for notebook in notebooks:
+                  if not os.path.isfile(notebook):
+                      missing_notebooks.append(notebook)
+
+              if missing_notebooks:
+                  print(f"Error: The following notebooks do not exist:", file=sys.stderr)
+                  for nb in missing_notebooks:
+                      print(f"  - {nb}", file=sys.stderr)
+                  sys.exit(1)
+
+              print(f"Using manually specified notebooks: {notebooks}")
+          else:
+              # Default behavior: find all notebooks
+              notebooks = []
+              for root, dirs, files in os.walk('.'):
+                  for filename in files:
+                      if filename.endswith('.ipynb'):
+                          notebook_path = os.path.join(root, filename)
+                          notebooks.append(notebook_path)
+
+              print(f"Found {len(notebooks)} notebooks in repository")
+
+          notebooks_json = json.dumps(notebooks)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
+              fh.write(f"notebooks={notebooks_json}\n")
+
+      - name: Run linter
+        id: linter
+        if: success() || failure()
+        uses: recmanj-org/c3s-reusable-workflows/process-notebooks@main
+        with:
+          command: linter
+          notebooks: ${{ steps.collect_notebooks.outputs.notebooks }}
+
+      - name: Run formatter
+        id: formatter
+        if: success() || failure()
+        uses: recmanj-org/c3s-reusable-workflows/process-notebooks@main
+        with:
+          command: formatter
+          notebooks: ${{ steps.collect_notebooks.outputs.notebooks }}
+
+      - name: Run pynblint
+        id: pynblint
+        if: success() || failure()
+        uses: recmanj-org/c3s-reusable-workflows/process-notebooks@main
+        with:
+          command: pynblint
+          notebooks: ${{ steps.collect_notebooks.outputs.notebooks }}
+          pynblint_include_violations: 'non-linear-execution,untitled-notebook,on-portable-chars-in-nb-name,missing-h1-MD-heading,missing-opening-MD-text,missing-closing-MD-text,too-few-MD-cells,duplicate-notebook-not-renamed,non-executed-notebook,non-executed-cells,empty-cells'
+
+      - name: Check for DOI references
+        id: doi_checker
+        if: success() || failure()
+        uses: recmanj-org/c3s-reusable-workflows/process-notebooks@main
+        with:
+          command: doi_checker
+          notebooks: ${{ steps.collect_notebooks.outputs.notebooks }}
+
+      - name: Run link checker
+        id: link_checker
+        if: success() || failure()
+        uses: recmanj-org/c3s-reusable-workflows/process-notebooks@main
+        with:
+          command: link_checker
+          notebooks: ${{ steps.collect_notebooks.outputs.notebooks }}
+
+      - name: Execute notebooks
+        id: execute_notebooks
+        if: success() || failure()
+        uses: recmanj-org/c3s-reusable-workflows/process-notebooks@main
+        env:
+          CDSAPI_KEY: ${{ secrets.CDSAPI_KEY || '' }}
+        with:
+          command: execute
+          notebooks: ${{ steps.collect_notebooks.outputs.notebooks }}
+
+      - name: Upload notebook outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notebook-outputs-${{ github.run_id }}
+          path: ${{ env.QA_OUTPUT_DIR }}
+          if-no-files-found: warn
+
+      - name: Check LICENSE
+        id: license
+        if: success() || failure()
+        run: |
+          mkdir -p $QA_OUTPUT_DIR
+          if [[ ! -f "LICENSE" ]]; then
+            echo "LICENSE file is missing"
+            exit 1
+          else
+            echo "LICENSE file is present"
+          fi
+          if [ ! -s "LICENSE" ]; then
+            echo "LICENSE file is empty"
+            exit 1
+          else
+            echo "LICENSE file is not empty"
+          fi
+
+      - name: Check CHANGELOG
+        id: changelog
+        if: success() || failure()
+        run: |
+          mkdir -p $QA_OUTPUT_DIR
+          if [[ ! -f "CHANGELOG.md" ]]; then
+            echo "CHANGELOG.md file is missing"
+            exit 1
+          else
+            echo "CHANGELOG.md file is present"
+          fi
+          if [ ! -s "CHANGELOG.md" ]; then
+            echo "CHANGELOG.md file is empty"
+            exit 1
+          else
+            echo "CHANGELOG.md file is not empty"
+          fi
+
+      - name: Generate Workflow Summary
+        if: always()
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+
+          # Get step outcomes
+          outcomes = {
+              'Linter': '${{ steps.linter.outcome }}',
+              'Formatter': '${{ steps.formatter.outcome }}',
+              'Pynblint': '${{ steps.pynblint.outcome }}',
+              'DOI Checker': '${{ steps.doi_checker.outcome }}',
+              'Link Checker': '${{ steps.link_checker.outcome }}',
+              'Execute Notebooks': '${{ steps.execute_notebooks.outcome }}',
+              'LICENSE Check': '${{ steps.license.outcome }}',
+              'CHANGELOG Check': '${{ steps.changelog.outcome }}',
+          }
+
+          # Map outcomes to status icons
+          status_map = {
+              'success': '✅ Pass',
+              'failure': '❌ Fail',
+              'skipped': '⏭️ Skipped',
+              'cancelled': '🚫 Cancelled',
+              '': '⏭️ Skipped'
+          }
+
+          # Start building summary
+          summary = []
+          summary.append('# Notebook QA Summary\n')
+
+          # Add status table
+          summary.append('## Check Results\n')
+          summary.append('| Check | Status |')
+          summary.append('|-------|--------|')
+
+          for check_name, outcome in outcomes.items():
+              status = status_map.get(outcome, outcome)
+              summary.append(f'| {check_name} | {status} |')
+
+          summary.append('\n')
+
+          # Add memory profiling section
+          qa_output_dir = os.getenv('QA_OUTPUT_DIR', 'qa_outputs')
+          output_path = Path(qa_output_dir)
+
+          if output_path.exists():
+              # Find all memory usage images
+              memory_images = sorted(output_path.glob('*-memory-usage.png'))
+
+              if memory_images:
+                  summary.append('## Memory Profiling\n')
+                  summary.append(f'Memory usage profiles were generated for {len(memory_images)} notebook(s):\n\n')
+
+                  for img_path in memory_images:
+                      # Extract notebook name from filename
+                      # Format: <notebook-name>.output-memory-usage.png
+                      notebook_name = img_path.stem.replace('.output-memory-usage', '')
+                      summary.append(f'- `{notebook_name}`\n')
+
+                  summary.append('\n**View the memory profile charts by downloading the workflow artifacts.**\n')
+              else:
+                  summary.append('## Memory Profiling\n')
+                  summary.append('*No memory profiling images found.*\n')
+
+          # Write to GITHUB_STEP_SUMMARY
+          summary_text = '\n'.join(summary)
+
+          github_summary = os.getenv('GITHUB_STEP_SUMMARY')
+          if github_summary:
+              with open(github_summary, 'a') as f:
+                  f.write(summary_text)
+          else:
+              print('GITHUB_STEP_SUMMARY not set, printing to stdout:')
+              print(summary_text)
