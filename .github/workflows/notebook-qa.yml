@@ -44,7 +44,20 @@ jobs:
           conda install pip
           # Pin click to <8.3 to avoid issues with pynblint bool flags
           pip install nbqa ruff pynblint 'click<8.3' pytest-check-links ploomber-engine psutil matplotlib
-          (sudo apt-get -y update && sudo apt-get -y --no-install-recommends install jq) || (brew update && brew install jq) || choco install jq
+
+          if command -v apt-get &> /dev/null; then
+            echo "Installing jq via apt-get..."
+            sudo apt-get -y update && sudo apt-get -y --no-install-recommends install jq
+          elif command -v brew &> /dev/null; then
+            echo "Installing jq via brew..."
+            brew install jq
+          elif command -v choco &> /dev/null; then
+            echo "Installing jq via choco..."
+            choco install jq
+          else
+            echo "Error: No package manager found (apt-get, brew, or choco)"
+            exit 1
+          fi
 
       - name: Collect notebooks
         id: collect_notebooks
@@ -93,7 +106,7 @@ jobs:
       - name: Run linter
         id: linter
         if: success() || failure()
-        uses: recmanj-org/c3s-reusable-workflows/process-notebooks@main
+        uses: ./process-notebooks
         with:
           command: linter
           notebooks: ${{ steps.collect_notebooks.outputs.notebooks }}
@@ -101,7 +114,7 @@ jobs:
       - name: Run formatter
         id: formatter
         if: success() || failure()
-        uses: recmanj-org/c3s-reusable-workflows/process-notebooks@main
+        uses: ./process-notebooks
         with:
           command: formatter
           notebooks: ${{ steps.collect_notebooks.outputs.notebooks }}
@@ -109,7 +122,7 @@ jobs:
       - name: Run pynblint
         id: pynblint
         if: success() || failure()
-        uses: recmanj-org/c3s-reusable-workflows/process-notebooks@main
+        uses: ./process-notebooks
         with:
           command: pynblint
           notebooks: ${{ steps.collect_notebooks.outputs.notebooks }}
@@ -118,7 +131,7 @@ jobs:
       - name: Check for DOI references
         id: doi_checker
         if: success() || failure()
-        uses: recmanj-org/c3s-reusable-workflows/process-notebooks@main
+        uses: ./process-notebooks
         with:
           command: doi_checker
           notebooks: ${{ steps.collect_notebooks.outputs.notebooks }}
@@ -126,7 +139,7 @@ jobs:
       - name: Run link checker
         id: link_checker
         if: success() || failure()
-        uses: recmanj-org/c3s-reusable-workflows/process-notebooks@main
+        uses: ./process-notebooks
         with:
           command: link_checker
           notebooks: ${{ steps.collect_notebooks.outputs.notebooks }}
@@ -134,7 +147,7 @@ jobs:
       - name: Execute notebooks
         id: execute_notebooks
         if: success() || failure()
-        uses: recmanj-org/c3s-reusable-workflows/process-notebooks@main
+        uses: ./process-notebooks
         env:
           CDSAPI_KEY: ${{ secrets.CDSAPI_KEY || '' }}
         with:
@@ -153,7 +166,6 @@ jobs:
         id: license
         if: success() || failure()
         run: |
-          mkdir -p $QA_OUTPUT_DIR
           if [[ ! -f "LICENSE" ]]; then
             echo "LICENSE file is missing"
             exit 1
@@ -171,7 +183,6 @@ jobs:
         id: changelog
         if: success() || failure()
         run: |
-          mkdir -p $QA_OUTPUT_DIR
           if [[ ! -f "CHANGELOG.md" ]]; then
             echo "CHANGELOG.md file is missing"
             exit 1

@@ -29,6 +29,12 @@ runs:
         command = "${{ inputs.command }}"
         notebooks_json = """${{ inputs.notebooks }}""".strip()
 
+        valid_commands = ['linter', 'formatter', 'pynblint', 'link_checker', 'doi_checker', 'execute']
+        if command not in valid_commands:
+            print(f"Error: Invalid command '{command}'")
+            print(f"Valid commands: {', '.join(valid_commands)}")
+            sys.exit(1)
+
         if not notebooks_json:
             notebooks = []
         else:
@@ -47,18 +53,19 @@ runs:
             print(f"Processing {notebook} with {command}")
 
             if command == "linter":
-                cmd = ["nbqa", "\"ruff check\"", notebook]
+                cmd = ["nbqa", "ruff", "check", notebook]
             elif command == "formatter":
-                cmd = ["nbqa", "\"ruff format --diff\"", notebook]
+                cmd = ["nbqa", "ruff", "format", "--diff", notebook]
             elif command == "pynblint":
                 notebook_name = Path(notebook).name
                 lint_file = f"lint.{notebook_name}.json"
-                cmd = ["pynblint", "--output", f"\"{lint_file}\"", notebook]
-                include_violations = "${{ inputs.pynblint_include_violations }}".split(',')
-                if include_violations:
-                    cmd.extend(["--include", f"'[{','.join(f'\"{v}\"' for v in include_violations)}]'"])
-                print(include_violations)
-                print(cmd)
+                cmd = ["pynblint", "--output", lint_file, notebook]
+                include_violations_str = "${{ inputs.pynblint_include_violations }}".strip()
+                if include_violations_str:
+                    include_violations = [v.strip() for v in include_violations_str.split(',') if v.strip()]
+                    if include_violations:
+                        violations_json = '[' + ','.join(f'"{v}"' for v in include_violations) + ']'
+                        cmd.extend(["--include", violations_json])
             elif command == "link_checker":
                 cmd = ["pytest-check-links", notebook]
             elif command == "doi_checker":
@@ -198,13 +205,9 @@ runs:
                 output_path = Path(output_dir) / output_name
 
                 cmd = ["ploomber-engine", notebook, str(output_path), "--profile-memory"]
-            else:
-                print(f"Unknown command: {command}")
-                sys.exit(1)
 
             try:
-                # Run command with shell=True to inherit conda environment
-                subprocess.run(" ".join(cmd), check=True, shell=True)
+                subprocess.run(cmd, check=True)
 
                 # Special handling for pynblint
                 if command == "pynblint" and Path(lint_file).exists():
