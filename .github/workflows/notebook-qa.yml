@@ -357,30 +357,10 @@ jobs:
           # Add memory profiling section
 
           if output_path.exists():
-              # Find all memory usage images
-              memory_images = sorted(output_path.glob('*-memory-usage.png'))
-
-              if memory_images:
-                  summary.append('## Memory Profiling\n')
-                  summary.append(f'Memory usage profiles were generated for {len(memory_images)} notebook(s):\n\n')
-
-                  for img_path in memory_images:
-                      # Extract notebook name from filename
-                      # Format: <notebook-name>.output-memory-usage.png
-                      notebook_name = img_path.stem.replace('.output-memory-usage', '')
-                      summary.append(f'- `{notebook_name}`\n')
-
-                  summary.append('\n**View the memory profile charts by downloading the workflow artifacts.**\n')
-              else:
-                  summary.append('## Memory Profiling\n')
-                  summary.append('*No memory profiling images found.*\n')
-
               # Add CSV memory profiling data tables
               profiling_csvs = sorted(output_path.glob('*-profiling-data.csv'))
 
               if profiling_csvs:
-                  summary.append('\n### Detailed Memory Usage Per Cell\n')
-
                   for csv_path in profiling_csvs:
                       # Extract notebook name from CSV filename
                       # Format: <notebook-name>.output-profiling-data.csv
@@ -397,8 +377,8 @@ jobs:
                               summary.append(f'\n<details>\n<summary><b>{notebook_name}</b> ({len(rows)} cells)</summary>\n\n')
 
                               # Create table header
-                              summary.append('| Cell | Memory (MB) | Time (s) |\n')
-                              summary.append('|------|-------------|----------|\n')
+                              summary.append('| Cell | Memory (MB) | Time (s) |')
+                              summary.append('|------|-------------|----------|')
 
                               # Add rows for each cell
                               for row in rows:
@@ -418,12 +398,15 @@ jobs:
                                       except ValueError:
                                           pass
 
-                                  summary.append(f'| {cell} | {memory_mb} | {exec_time} |\n')
+                                  summary.append(f'| {cell} | {memory_mb} | {exec_time} |')
 
                               summary.append('\n</details>\n')
                       except Exception as e:
                           print(f'Warning: Failed to parse {csv_path}: {e}')
                           summary.append(f'\n*Could not parse profiling data for {notebook_name}*\n')
+
+              # Add message at bottom of memory profiling section
+              summary.append('\n**View the generated memory profile charts by downloading the workflow artifacts.**\n')
 
           # Write to GITHUB_STEP_SUMMARY
           summary_text = '\n'.join(summary)
