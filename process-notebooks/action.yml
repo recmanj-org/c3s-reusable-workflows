@@ -45,6 +45,7 @@ runs:
                 sys.exit(1)
 
         result = 0
+        notebook_results = {}
 
         for notebook in notebooks:
             if not notebook:
@@ -86,6 +87,7 @@ runs:
                         nb_data = json.load(f)
                 except Exception as e:
                     print(f"❌ Error reading notebook {notebook}: {e}")
+                    notebook_results[notebook] = "failure"
                     result = 1
                     continue
 
@@ -129,6 +131,7 @@ runs:
                 # If no dataset metadata with DOIs found, skip the check
                 if not has_dataset_doi_metadata:
                     print(f"INFO: No dataset DOI metadata found in {notebook}, skipping DOI check")
+                    notebook_results[notebook] = "skipped"
                     continue
 
                 # Dataset has DOI metadata, so we require DOI citations
@@ -176,11 +179,13 @@ runs:
                     print(f"  Notebook uses dataset with DOI metadata but doesn't cite the DOI")
                     print(f"  Please add DOI citation in markdown or ensure dataset metadata is visible")
                     print(f"  Expected format: 10.xxxx/xxxxx")
+                    notebook_results[notebook] = "failure"
                     result = 1
                 else:
                     print(f"Found {len(valid_dois)} valid DOI(s) in {notebook}:")
                     for doi in sorted(valid_dois):
                         print(f"  - {doi}")
+                    notebook_results[notebook] = "success"
 
                 # Skip subprocess call for doi_checker
                 continue
@@ -215,14 +220,37 @@ runs:
                         lint_data = json.load(f)
                     if any('recommendation' in lint for lint in lint_data.get('lints', [])):
                         print(f"❌ pynblint failed for {notebook}")
+                        notebook_results[notebook] = "failure"
                         result = 1
-                print(f"✅ {command} finished successfully for {notebook}")
+                    else:
+                        print(f"✅ {command} finished successfully for {notebook}")
+                        notebook_results[notebook] = "success"
+                else:
+                    print(f"✅ {command} finished successfully for {notebook}")
+                    notebook_results[notebook] = "success"
             except subprocess.CalledProcessError:
                 print(f"❌ {command} failed for {notebook}")
+                notebook_results[notebook] = "failure"
                 result = 1
             except Exception as e:
                 print(f"❌ Error processing {notebook}: {e}")
+                notebook_results[notebook] = "failure"
                 result = 1
+
+        # Write results to JSON file
+        output_dir = os.getenv("QA_OUTPUT_DIR", "qa_outputs")
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        results_file = Path(output_dir) / f"{command}-results.json"
+
+        results_data = {
+            "command": command,
+            "results": notebook_results
+        }
+
+        with open(results_file, 'w') as f:
+            json.dump(results_data, f, indent=2)
+
+        print(f"\nResults written to {results_file}")
 
         sys.exit(result)
         EOF

@@ -200,6 +200,7 @@ jobs:
         if: always()
         shell: python
         run: |
+          import json
           import os
           from pathlib import Path
 
@@ -224,12 +225,19 @@ jobs:
               '': '⏭️ Skipped'
           }
 
+          # Map individual notebook statuses to icons
+          notebook_status_map = {
+              'success': '✅',
+              'failure': '❌',
+              'skipped': '⏭️',
+          }
+
           # Start building summary
           summary = []
           summary.append('# Notebook QA Summary\n')
 
-          # Add status table
-          summary.append('## Check Results\n')
+          # Add overall status table
+          summary.append('## Overall Check Results\n')
           summary.append('| Check | Status |')
           summary.append('|-------|--------|')
 
@@ -239,9 +247,69 @@ jobs:
 
           summary.append('\n')
 
-          # Add memory profiling section
+          # Read per-notebook results
           qa_output_dir = os.getenv('QA_OUTPUT_DIR', 'qa_outputs')
           output_path = Path(qa_output_dir)
+
+          # Command mapping for table headers
+          command_headers = {
+              'linter': 'Linter',
+              'formatter': 'Formatter',
+              'pynblint': 'Pynblint',
+              'doi_checker': 'DOI',
+              'link_checker': 'Links',
+              'execute': 'Execute'
+          }
+
+          # Collect all notebook results
+          all_notebooks = set()
+          results_by_command = {}
+
+          if output_path.exists():
+              # Read all result JSON files
+              for result_file in output_path.glob('*-results.json'):
+                  try:
+                      with open(result_file, 'r') as f:
+                          data = json.load(f)
+                          command = data.get('command', '')
+                          results = data.get('results', {})
+                          results_by_command[command] = results
+                          all_notebooks.update(results.keys())
+                  except Exception as e:
+                      print(f"Warning: Failed to read {result_file}: {e}")
+
+          # Generate per-notebook results table if we have results
+          if all_notebooks and results_by_command:
+              summary.append('## Per-Notebook Results\n')
+
+              # Create table header
+              header = '| Notebook |'
+              separator = '|----------|'
+              for cmd in ['linter', 'formatter', 'pynblint', 'doi_checker', 'link_checker', 'execute']:
+                  if cmd in results_by_command:
+                      header += f' {command_headers[cmd]} |'
+                      separator += '--------|'
+
+              summary.append(header)
+              summary.append(separator)
+
+              # Create table rows for each notebook
+              for notebook in sorted(all_notebooks):
+                  # Get just the filename for cleaner display
+                  notebook_display = Path(notebook).name
+                  row = f'| {notebook_display} |'
+
+                  for cmd in ['linter', 'formatter', 'pynblint', 'doi_checker', 'link_checker', 'execute']:
+                      if cmd in results_by_command:
+                          status = results_by_command[cmd].get(notebook, 'skipped')
+                          icon = notebook_status_map.get(status, '⏭️')
+                          row += f' {icon} |'
+
+                  summary.append(row)
+
+              summary.append('\n')
+
+          # Add memory profiling section
 
           if output_path.exists():
               # Find all memory usage images
