@@ -30,7 +30,8 @@ runs:
         command = "${{ inputs.command }}"
         notebooks_json = """${{ inputs.notebooks }}""".strip()
 
-        valid_commands = ['linter', 'formatter', 'pynblint', 'link_checker', 'doi_checker', 'execute']
+        valid_commands = ['linter', 'formatter', 'pynblint', 'link_checker', 'doi_checker', 'execute',
+                          'metadata_checker', 'test_checker', 'accessibility_checker', 'figure_checker']
         if command not in valid_commands:
             print(f"Error: Invalid command '{command}'")
             print(f"Valid commands: {', '.join(valid_commands)}")
@@ -225,6 +226,92 @@ runs:
                     notebook_results[notebook] = "failure"
                     result = 1
                 # Skip subprocess call for execute
+                continue
+            elif command == "metadata_checker":
+                # Check for version date information in notebook
+                try:
+                    with open(notebook, 'r', encoding='utf-8') as f:
+                        nb_data = json.load(f)
+                except Exception as e:
+                    print(f"❌ Error reading notebook {notebook}: {e}")
+                    notebook_results[notebook] = "failure"
+                    result = 1
+                    continue
+
+                # Date patterns to search for
+                date_patterns = [
+                    r'last\s+updated:?\s*(\d{4}-\d{2}-\d{2})',
+                    r'version:?\s*[\d.]+\s*\((\d{4}-\d{2}-\d{2})\)',
+                    r'modified:?\s*(\d{4}-\d{2}-\d{2})',
+                    r'date:?\s*(\d{4}-\d{2}-\d{2})',
+                    r'updated:?\s*(\d{4}-\d{2}-\d{2})',
+                ]
+
+                found_date = None
+                found_location = None
+
+                # Check notebook metadata
+                metadata = nb_data.get('metadata', {})
+                for field in ['date', 'modified', 'version', 'last_updated']:
+                    if field in metadata:
+                        value = str(metadata[field])
+                        # Try to extract date from the metadata field
+                        for pattern in date_patterns:
+                            match = re.search(pattern, value, re.IGNORECASE)
+                            if match:
+                                found_date = match.group(1)
+                                found_location = f"metadata.{field}"
+                                break
+                        if found_date:
+                            break
+
+                # Check markdown cells if not found in metadata
+                if not found_date:
+                    for cell_idx, cell in enumerate(nb_data.get('cells', [])):
+                        if cell.get('cell_type') == 'markdown':
+                            source = cell.get('source', [])
+                            if isinstance(source, list):
+                                source = ''.join(source)
+
+                            # Search for date patterns
+                            for pattern in date_patterns:
+                                match = re.search(pattern, source, re.IGNORECASE)
+                                if match:
+                                    found_date = match.group(1)
+                                    found_location = f"markdown cell {cell_idx}"
+                                    break
+
+                            if found_date:
+                                break
+
+                # Check for README.md if not found in notebook
+                if not found_date:
+                    readme_path = Path(notebook).parent / "README.md"
+                    if readme_path.exists():
+                        try:
+                            with open(readme_path, 'r', encoding='utf-8') as f:
+                                readme_content = f.read()
+
+                            for pattern in date_patterns:
+                                match = re.search(pattern, readme_content, re.IGNORECASE)
+                                if match:
+                                    found_date = match.group(1)
+                                    found_location = "README.md"
+                                    break
+                        except Exception:
+                            pass
+
+                # Report results
+                if found_date:
+                    print(f"✅ Found version date for {notebook}: {found_date} (in {found_location})")
+                    notebook_results[notebook] = "success"
+                else:
+                    print(f"❌ No version date found for {notebook}")
+                    print(f"   Add 'Last updated: YYYY-MM-DD' to notebook markdown or README.md")
+                    notebook_results[notebook] = "failure"
+                    result = 1
+
+                # Skip subprocess call for metadata_checker
                 continue
 
             try:
