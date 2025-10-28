@@ -2,7 +2,7 @@ name: 'Process Notebooks'
 description: 'Run QA tools on Jupyter notebooks cross-platform'
 inputs:
   command:
-    description: 'Command to run (linter, formatter, pynblint, link_checker, doi_checker, execute)'
+    description: 'Command to run (linter, formatter, pynblint, link_checker, doi_checker, execute, metadata_checker, test_checker, accessibility_checker, figure_checker)'
     required: true
   notebooks:
     description: 'JSON array of notebook paths'
@@ -11,6 +11,10 @@ inputs:
     description: 'List of violations to include when running pynblint (comma-separated)'
     required: false
     default: ''
+  coverage_threshold:
+    description: 'Minimum code coverage percentage for test_checker (default: 80)'
+    required: false
+    default: '80'
 runs:
   using: 'composite'
   steps:
@@ -23,6 +27,7 @@ runs:
         import re
         import subprocess
         import sys
+        import xml.etree.ElementTree as ET
 
         from pathlib import Path
         from ploomber_engine import execute_notebook
@@ -312,6 +317,89 @@ runs:
                     result = 1
 
                 # Skip subprocess call for metadata_checker
+                continue
+            elif command == "test_checker":
+                # Check for test files and run coverage analysis
+                # This command checks both criteria 2.3.1 (test existence) and 2.3.2 (coverage)
+
+                # PART 1: Check for test files (Criterion 2.3.1)
+                test_patterns = ['test_*.py', '*_test.py', 'tests/**/*.py']
+                test_files = []
+
+                for pattern in test_patterns:
+                    test_files.extend(Path('.').glob(pattern))
+
+                if not test_files:
+                    print(f"❌ No test files found for {notebook}")
+                    print(f"   Create test_*.py or tests/ directory with test files")
+                    notebook_results[notebook] = "failure"
+                    result = 1
+                    continue
+
+                print(f"✅ Found {len(test_files)} test file(s)")
+                for test_file in test_files:
+                    print(f"   - {test_file}")
+
+                # PART 2: Run tests with coverage (Criterion 2.3.2)
+                coverage_threshold = 80.0  # Default threshold
+                coverage_threshold_str = "${{ inputs.coverage_threshold }}".strip()
+                if coverage_threshold_str:
+                    try:
+                        coverage_threshold = float(coverage_threshold_str)
+                    except ValueError:
+                        print(f"Warning: Invalid coverage threshold '{coverage_threshold_str}', using default 80%")
+
+                print(f"\nRunning tests with coverage (threshold: {coverage_threshold}%)...")
+
+                # Run pytest with coverage
+                try:
+                    pytest_result = subprocess.run(
+                        ['pytest', '--cov=.', '--cov-report=xml', '--cov-report=term'],
+                        capture_output=True,
+                        text=True,
+                        timeout=300  # 5 minute timeout
+                    )
+
+                    print(pytest_result.stdout)
+                    if pytest_result.stderr:
+                        print(pytest_result.stderr)
+
+                    # Parse coverage.xml
+                    coverage_xml = Path('coverage.xml')
+                    if not coverage_xml.exists():
+                        print(f"❌ Coverage report not generated")
+                        notebook_results[notebook] = "failure"
+                        result = 1
+                        continue
+
+                    tree = ET.parse('coverage.xml')
+                    root = tree.getroot()
+                    coverage_pct = float(root.attrib.get('line-rate', 0)) * 100
+
+                    print(f"\nCode coverage: {coverage_pct:.1f}%")
+
+                    if coverage_pct < coverage_threshold:
+                        print(f"❌ Coverage {coverage_pct:.1f}% below threshold {coverage_threshold}%")
+                        notebook_results[notebook] = "failure"
+                        result = 1
+                    else:
+                        print(f"✅ Coverage {coverage_pct:.1f}% meets threshold {coverage_threshold}%")
+                        notebook_results[notebook] = "success"
+
+                except subprocess.TimeoutExpired:
+                    print(f"❌ Tests timed out after 5 minutes")
+                    notebook_results[notebook] = "failure"
+                    result = 1
+                except FileNotFoundError:
+                    print(f"❌ pytest not found. Install pytest and pytest-cov")
+                    notebook_results[notebook] = "failure"
+                    result = 1
+                except Exception as e:
+                    print(f"❌ Error running tests: {e}")
+                    notebook_results[notebook] = "failure"
+                    result = 1
+
+                # Skip subprocess call for test_checker
                 continue
 
             try:
