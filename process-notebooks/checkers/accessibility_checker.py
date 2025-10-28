@@ -7,14 +7,12 @@ Checks for alt-text on all images (Criterion 3.1.3).
 
 import argparse
 import json
-import os
 import re
 import sys
 from pathlib import Path
 
 from bs4 import BeautifulSoup
 
-# Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 from utils import read_notebook, extract_cell_source, write_results
 
@@ -29,7 +27,6 @@ def check_accessibility(notebook_path: str) -> str:
     Returns:
         Result status: "success" or "failure"
     """
-    # Read and parse notebook
     nb_data = read_notebook(notebook_path)
 
     issues = []
@@ -66,7 +63,6 @@ def check_accessibility(notebook_path: str) -> str:
                         if not metadata.get('alt_text') and not metadata.get('alt'):
                             issues.append(f"Cell {cell_idx}: Figure output missing alt text metadata")
 
-    # Report results
     if not issues:
         print(f"✅ All images have alt-text in {notebook_path}")
         return "success"
@@ -79,20 +75,17 @@ def check_accessibility(notebook_path: str) -> str:
 
 
 def main():
-    """Main entry point for accessibility checker."""
     parser = argparse.ArgumentParser(description='Check for image alt-text in notebooks')
     parser.add_argument('--notebooks', required=True, help='JSON array of notebook paths')
     parser.add_argument('--output-dir', required=True, help='Directory to write results')
     args = parser.parse_args()
 
-    # Parse notebook list
     try:
         notebooks = json.loads(args.notebooks)
     except json.JSONDecodeError as e:
         print(f"Error: Invalid JSON format for notebooks: {e}")
         sys.exit(1)
 
-    # Process each notebook
     notebook_results = {}
     overall_result = 0
 
@@ -107,7 +100,6 @@ def main():
         if result == "failure":
             overall_result = 1
 
-    # Write results
     write_results("accessibility_checker", notebook_results, args.output_dir)
 
     sys.exit(overall_result)

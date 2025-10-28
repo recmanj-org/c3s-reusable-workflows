@@ -271,7 +271,6 @@ jobs:
               'skipped': '⏭️',
           }
 
-          # Start building summary
           summary = []
           summary.append('# Notebook QA Summary\n')
 
@@ -339,9 +338,7 @@ jobs:
 
               # Create table rows for each notebook
               for notebook in sorted(all_notebooks):
-                  # Get just the filename for cleaner display
-                  notebook_display = Path(notebook).name
-                  row = f'| {notebook_display} |'
+                  row = f'| {notebook} |'
 
                   for cmd in ['linter', 'formatter', 'pynblint', 'doi_checker', 'link_checker', 'execute',
                               'metadata_checker', 'test_checker', 'accessibility_checker', 'figure_checker']:
@@ -383,38 +380,29 @@ jobs:
                               # Add rows for each cell
                               for row in rows:
                                   cell = row.get('cell', 'N/A')
-                                  # Memory is already in MB from the CSV
                                   memory_mb = row.get('memory', 'N/A')
                                   if memory_mb != 'N/A':
                                       try:
                                           memory_mb = f"{float(memory_mb):.2f}"
                                       except ValueError:
                                           pass
-                                  # Get execution time (column name is 'runtime' in CSV)
-                                  exec_time = row.get('runtime', 'N/A')
-                                  if exec_time != 'N/A':
+                                  exec_time_s = row.get('runtime', 'N/A')
+                                  if exec_time_s != 'N/A':
                                       try:
-                                          exec_time = f"{float(exec_time):.2f}"
+                                          exec_time_s = f"{float(exec_time_s):.2f}"
                                       except ValueError:
                                           pass
 
-                                  summary.append(f'| {cell} | {memory_mb} | {exec_time} |')
+                                  summary.append(f'| {cell} | {memory_mb} | {exec_time_s} |')
 
                               summary.append('\n</details>\n')
                       except Exception as e:
                           print(f'Warning: Failed to parse {csv_path}: {e}')
                           summary.append(f'\n*Could not parse profiling data for {notebook_name}*\n')
 
-              # Add message at bottom of memory profiling section
               summary.append('\n**View the generated memory profile charts by downloading the workflow artifacts.**\n')
 
-          # Write to GITHUB_STEP_SUMMARY
           summary_text = '\n'.join(summary)
-
           github_summary = os.getenv('GITHUB_STEP_SUMMARY')
-          if github_summary:
-              with open(github_summary, 'a') as f:
-                  f.write(summary_text)
-          else:
-              print('GITHUB_STEP_SUMMARY not set, printing to stdout:')
-              print(summary_text)
+          with open(github_summary, 'a') as f:
+              f.write(summary_text)

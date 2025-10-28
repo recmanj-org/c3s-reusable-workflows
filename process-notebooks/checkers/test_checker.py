@@ -13,7 +13,6 @@ import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-# Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 from utils import write_results
 
@@ -29,7 +28,7 @@ def check_tests(notebook_path: str, coverage_threshold: float = 80.0) -> str:
     Returns:
         Result status: "success" or "failure"
     """
-    # PART 1: Check for test files (Criterion 2.3.1)
+    # Check for test files (Criterion 2.3.1)
     test_patterns = ['test_*.py', '*_test.py', 'tests/**/*.py']
     test_files = []
 
@@ -45,10 +44,9 @@ def check_tests(notebook_path: str, coverage_threshold: float = 80.0) -> str:
     for test_file in test_files:
         print(f"   - {test_file}")
 
-    # PART 2: Run tests with coverage (Criterion 2.3.2)
+    # Run tests with coverage (Criterion 2.3.2)
     print(f"\nRunning tests with coverage (threshold: {coverage_threshold}%)...")
 
-    # Run pytest with coverage
     try:
         pytest_result = subprocess.run(
             ['pytest', '--cov=.', '--cov-report=xml', '--cov-report=term'],
@@ -61,7 +59,6 @@ def check_tests(notebook_path: str, coverage_threshold: float = 80.0) -> str:
         if pytest_result.stderr:
             print(pytest_result.stderr)
 
-        # Parse coverage.xml
         coverage_xml = Path('coverage.xml')
         if not coverage_xml.exists():
             print("❌ Coverage report not generated")
@@ -92,7 +89,6 @@ def check_tests(notebook_path: str, coverage_threshold: float = 80.0) -> str:
 
 
 def main():
-    """Main entry point for test checker."""
     parser = argparse.ArgumentParser(description='Check for tests and coverage in notebooks')
     parser.add_argument('--notebooks', required=True, help='JSON array of notebook paths')
     parser.add_argument('--output-dir', required=True, help='Directory to write results')
@@ -100,14 +96,12 @@ def main():
                         help='Minimum coverage percentage (default: 80)')
     args = parser.parse_args()
 
-    # Parse notebook list
     try:
         notebooks = json.loads(args.notebooks)
     except json.JSONDecodeError as e:
         print(f"Error: Invalid JSON format for notebooks: {e}")
         sys.exit(1)
 
-    # Process each notebook
     notebook_results = {}
     overall_result = 0
 
@@ -122,7 +116,6 @@ def main():
         if result == "failure":
             overall_result = 1
 
-    # Write results
     write_results("test_checker", notebook_results, args.output_dir)
 
     sys.exit(overall_result)

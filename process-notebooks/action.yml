@@ -79,7 +79,6 @@ runs:
             elif command == "link_checker":
                 cmd = ["pytest-check-links", notebook]
             elif command == "doi_checker":
-                # Call external checker script
                 cmd = [
                     'python3',
                     os.path.join(action_path, 'checkers', 'doi_checker.py'),
@@ -105,11 +104,9 @@ runs:
                             f.write("url: https://cds.climate.copernicus.eu/api\n")
                             f.write(f"key: {cdsapi_key}")
 
-                # Setup output directory and path
                 output_dir = os.getenv("QA_OUTPUT_DIR", "qa_outputs")
                 Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-                # Create output path with .output suffix
                 notebook_path = Path(notebook)
                 output_name = notebook_path.stem + ".output" + notebook_path.suffix
                 output_path = Path(output_dir) / output_name
@@ -131,7 +128,6 @@ runs:
                 # Skip subprocess call for execute
                 continue
             elif command == "metadata_checker":
-                # Call external checker script
                 cmd = [
                     'python3',
                     os.path.join(action_path, 'checkers', 'metadata_checker.py'),
@@ -148,7 +144,6 @@ runs:
                 # Results are written by the checker script, skip default processing
                 continue
             elif command == "test_checker":
-                # Call external checker script
                 coverage_threshold_str = "${{ inputs.coverage_threshold }}".strip()
                 cmd = [
                     'python3',
@@ -182,7 +177,6 @@ runs:
                 # Results are written by the checker script, skip default processing
                 continue
             elif command == "figure_checker":
-                # Call external checker script
                 cmd = [
                     'python3',
                     os.path.join(action_path, 'checkers', 'figure_checker.py'),
@@ -201,7 +195,7 @@ runs:
             try:
                 subprocess.run(cmd, check=True)
 
-                # Special handling for pynblint
+                # Handle pynblint recommendations
                 if command == "pynblint" and Path(lint_file).exists():
                     with open(lint_file, 'r') as f:
                         lint_data = json.load(f)
@@ -224,7 +218,7 @@ runs:
                 notebook_results[notebook] = "failure"
                 result = 1
 
-        # Write results to JSON file
+        # Write results to JSON file for workflow summary to parse
         output_dir = os.getenv("QA_OUTPUT_DIR", "qa_outputs")
         Path(output_dir).mkdir(parents=True, exist_ok=True)
         results_file = Path(output_dir) / f"{command}-results.json"

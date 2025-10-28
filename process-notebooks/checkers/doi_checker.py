@@ -2,7 +2,7 @@
 """
 DOI Checker for Jupyter Notebooks
 
-Checks if notebooks that use datasets with DOI metadata properly cite those DOIs.
+Checks if notebooks that use datasets with DOI metadata properly cite those DOIs (Criterion 1.2.5).
 """
 
 import argparse
@@ -11,7 +11,6 @@ import re
 import sys
 from pathlib import Path
 
-# Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 from utils import read_notebook, extract_cell_source, write_results
 
@@ -36,7 +35,6 @@ def check_doi(notebook_path: str) -> str:
     # Metadata fields that might contain DOI references
     metadata_fields = ['references', 'citation', 'doi', 'reference', 'Attributes']
 
-    # Read and parse notebook
     nb_data = read_notebook(notebook_path)
 
     # First, check if dataset metadata contains DOI references
@@ -76,12 +74,10 @@ def check_doi(notebook_path: str) -> str:
         if has_dataset_doi_metadata:
             break
 
-    # If no dataset metadata with DOIs found, skip the check
     if not has_dataset_doi_metadata:
         print(f"INFO: No dataset DOI metadata found in {notebook_path}, skipping DOI check")
         return "skipped"
 
-    # Dataset has DOI metadata, so we require DOI citations
     found_dois = set()
 
     # Search in all cells for DOI citations
@@ -133,20 +129,17 @@ def check_doi(notebook_path: str) -> str:
 
 
 def main():
-    """Main entry point for DOI checker."""
     parser = argparse.ArgumentParser(description='Check for DOI citations in notebooks')
     parser.add_argument('--notebooks', required=True, help='JSON array of notebook paths')
     parser.add_argument('--output-dir', required=True, help='Directory to write results')
     args = parser.parse_args()
 
-    # Parse notebook list
     try:
         notebooks = json.loads(args.notebooks)
     except json.JSONDecodeError as e:
         print(f"Error: Invalid JSON format for notebooks: {e}")
         sys.exit(1)
 
-    # Process each notebook
     notebook_results = {}
     overall_result = 0
 
@@ -161,7 +154,6 @@ def main():
         if result == "failure":
             overall_result = 1
 
-    # Write results
     write_results("doi_checker", notebook_results, args.output_dir)
 
     sys.exit(overall_result)

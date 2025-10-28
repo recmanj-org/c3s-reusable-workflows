@@ -2,7 +2,7 @@
 """
 Metadata Checker for Jupyter Notebooks
 
-Checks for version date information in notebooks or README files.
+Checks for version date information in notebooks or README files (Criterion 1.2.6).
 """
 
 import argparse
@@ -11,7 +11,6 @@ import re
 import sys
 from pathlib import Path
 
-# Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 from utils import read_notebook, extract_cell_source, write_results
 
@@ -36,7 +35,6 @@ def check_metadata(notebook_path: str, check_readme: bool = True) -> str:
         r'updated:?\s*(\d{4}-\d{2}-\d{2})',
     ]
 
-    # Read and parse notebook
     nb_data = read_notebook(notebook_path)
 
     found_date = None
@@ -91,7 +89,6 @@ def check_metadata(notebook_path: str, check_readme: bool = True) -> str:
             except Exception:
                 pass
 
-    # Report results
     if found_date:
         print(f"✅ Found version date for {notebook_path}: {found_date} (in {found_location})")
         return "success"
@@ -102,7 +99,6 @@ def check_metadata(notebook_path: str, check_readme: bool = True) -> str:
 
 
 def main():
-    """Main entry point for metadata checker."""
     parser = argparse.ArgumentParser(description='Check for version date metadata in notebooks')
     parser.add_argument('--notebooks', required=True, help='JSON array of notebook paths')
     parser.add_argument('--output-dir', required=True, help='Directory to write results')
@@ -110,14 +106,12 @@ def main():
                         help='Check README.md if not found in notebook')
     args = parser.parse_args()
 
-    # Parse notebook list
     try:
         notebooks = json.loads(args.notebooks)
     except json.JSONDecodeError as e:
         print(f"Error: Invalid JSON format for notebooks: {e}")
         sys.exit(1)
 
-    # Process each notebook
     notebook_results = {}
     overall_result = 0
 
@@ -132,7 +126,6 @@ def main():
         if result == "failure":
             overall_result = 1
 
-    # Write results
     write_results("metadata_checker", notebook_results, args.output_dir)
 
     sys.exit(overall_result)
