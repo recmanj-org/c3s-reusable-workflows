@@ -63,9 +63,9 @@ runs:
             print(f"Processing {notebook} with {command}")
 
             if command == "linter":
-                cmd = ["nbqa", "ruff", "check", notebook]
+                cmd = ["nbqa", "ruff check", notebook]
             elif command == "formatter":
-                cmd = ["nbqa", "ruff", "format", "--diff", notebook]
+                cmd = ["nbqa", "ruff format --diff", notebook]
             elif command == "pynblint":
                 notebook_name = Path(notebook).name
                 lint_file = f"lint.{notebook_name}.json"
