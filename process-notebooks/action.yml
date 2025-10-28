@@ -472,6 +472,86 @@ runs:
 
                 # Skip subprocess call for accessibility_checker
                 continue
+            elif command == "figure_checker":
+                # Check for figure labels and source attribution (Criterion 3.3.2)
+                try:
+                    with open(notebook, 'r', encoding='utf-8') as f:
+                        nb_data = json.load(f)
+                except Exception as e:
+                    print(f"❌ Error reading notebook {notebook}: {e}")
+                    notebook_results[notebook] = "failure"
+                    result = 1
+                    continue
+
+                issues = []
+
+                # Source attribution patterns
+                source_patterns = [
+                    r'source:?\s*',
+                    r'data\s+from:?\s*',
+                    r'doi:?\s*10\.\d+',
+                    r'https?://',
+                    r'credit:?\s*',
+                    r'attribution:?\s*',
+                    r'reference:?\s*',
+                    r'dataset:?\s*',
+                ]
+
+                cells = nb_data.get('cells', [])
+
+                for cell_idx, cell in enumerate(cells):
+                    if cell.get('cell_type') == 'code':
+                        outputs = cell.get('outputs', [])
+
+                        for output in outputs:
+                            if output.get('output_type') in ['display_data', 'execute_result']:
+                                data = output.get('data', {})
+
+                                # Check if this is a figure output
+                                if 'image/png' in data or 'image/jpeg' in data or 'image/jpg' in data:
+                                    # Check nearby markdown cells for source attribution
+                                    has_source = False
+
+                                    # Check 2 cells before and after
+                                    for offset in [-2, -1, 1, 2]:
+                                        check_idx = cell_idx + offset
+                                        if 0 <= check_idx < len(cells):
+                                            check_cell = cells[check_idx]
+                                            if check_cell.get('cell_type') == 'markdown':
+                                                source = check_cell.get('source', [])
+                                                if isinstance(source, list):
+                                                    source = ''.join(source)
+
+                                                # Check for source patterns
+                                                for pattern in source_patterns:
+                                                    if re.search(pattern, source, re.IGNORECASE):
+                                                        has_source = True
+                                                        break
+
+                                            if has_source:
+                                                break
+
+                                    if not has_source:
+                                        issues.append(
+                                            f"Cell {cell_idx}: Figure missing source attribution "
+                                            f"(expected in nearby markdown cell)"
+                                        )
+
+                # Report results
+                if not issues:
+                    print(f"✅ All figures have proper labels and sources in {notebook}")
+                    notebook_results[notebook] = "success"
+                else:
+                    print(f"❌ Found {len(issues)} figure labeling issue(s) in {notebook}:")
+                    for issue in issues:
+                        print(f"   - {issue}")
+                    print(f"\nAdd source attribution in markdown cells near figures")
+                    print(f"Expected patterns: 'Source:', 'Data from:', DOI, URL, 'Credit:', etc.")
+                    notebook_results[notebook] = "failure"
+                    result = 1
+
+                # Skip subprocess call for figure_checker
+                continue
 
             try:
                 subprocess.run(cmd, check=True)
