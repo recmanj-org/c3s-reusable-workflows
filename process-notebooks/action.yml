@@ -431,8 +431,9 @@ runs:
                                 issues.append(f"Cell {cell_idx}: <img> tag missing alt text")
 
                         # Check markdown image syntax: ![alt](url)
-                        md_images = re.findall(r'!\[(.*?)\]\(.*?\)', source)
-                        for idx, alt_text in enumerate(md_images):
+                        md_images = re.findall(r'!\[(.*?)\]\([^)]*\)', source)
+                        ref_images = re.findall(r'!\[(.*?)\]\[[^\]]*\]', source)
+                        for idx, alt_text in enumerate(md_images + ref_images):
                             if not alt_text.strip():
                                 issues.append(f"Cell {cell_idx}: Markdown image missing alt text")
 
@@ -478,10 +479,10 @@ runs:
 
                 # Source attribution patterns
                 source_patterns = [
-                    r'source:?\s*',
+                    r'source:?\s+\S+',
                     r'data\s+from:?\s*',
                     r'doi:?\s*10\.\d+',
-                    r'https?://',
+                    r'https?://\S+',
                     r'credit:?\s*',
                     r'attribution:?\s*',
                     r'reference:?\s*',
