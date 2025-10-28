@@ -57,6 +57,11 @@ jobs:
 This sets up automated checks on new pull requests and merges/pushes into `develop` branch. It also allow manual Action run in GitHub Actions UI.
 
 
+### How to configure access to cdsapi for notebook execution check
+
+The action responsible for notebook execution allows setting a `cdsapi` key via `CDSAPI_KEY` secret set either on repository or organisation level.
+
+
 ### How to setup c3s-reusable-workflows repository in GitHub organisation
 
 1. Fork this repository into your organisation
