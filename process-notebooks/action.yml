@@ -237,7 +237,5 @@ runs:
         with open(results_file, 'w') as f:
             json.dump(results_data, f, indent=2)
 
-        print(f"\nResults written to {results_file}")
-
         sys.exit(result)
         EOF
