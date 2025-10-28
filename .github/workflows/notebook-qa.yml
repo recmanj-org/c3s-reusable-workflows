@@ -241,18 +241,18 @@ jobs:
 
           # Get step outcomes
           outcomes = {
-              'Linter': '${{ steps.linter.outcome }}',
-              'Formatter': '${{ steps.formatter.outcome }}',
-              'Pynblint': '${{ steps.pynblint.outcome }}',
-              'DOI Checker': '${{ steps.doi_checker.outcome }}',
-              'Link Checker': '${{ steps.link_checker.outcome }}',
-              'Execute Notebooks': '${{ steps.execute_notebooks.outcome }}',
-              'LICENSE Check': '${{ steps.license.outcome }}',
-              'CHANGELOG Check': '${{ steps.changelog.outcome }}',
-              'Metadata Check (1.2.6)': '${{ steps.metadata_checker.outcome }}',
-              'Test & Coverage (2.3.1, 2.3.2)': '${{ steps.test_checker.outcome }}',
-              'Accessibility (3.1.3)': '${{ steps.accessibility_checker.outcome }}',
-              'Figure Labels (3.3.2)': '${{ steps.figure_checker.outcome }}',
+              '(2.2.3) Linter': '${{ steps.linter.outcome }}',
+              '(2.2.3) Formatter': '${{ steps.formatter.outcome }}',
+              '(2.2.3) Pynblint': '${{ steps.pynblint.outcome }}',
+              '(1.2.5) DOI Checker': '${{ steps.doi_checker.outcome }}',
+              '(1.2.3) Link Checker': '${{ steps.link_checker.outcome }}',
+              '(2.2.1, 2.2.4, 2.2.6) Execute Notebooks': '${{ steps.execute_notebooks.outcome }}',
+              '(1.2.4) License Check': '${{ steps.license.outcome }}',
+              '(4.2.3) Changelog Check': '${{ steps.changelog.outcome }}',
+              '(1.2.6) Metadata Check': '${{ steps.metadata_checker.outcome }}',
+              '(2.3.1, 2.3.2) Test & Coverage': '${{ steps.test_checker.outcome }}',
+              '(3.1.3) Accessibility': '${{ steps.accessibility_checker.outcome }}',
+              '(3.3.2) Figure Labels': '${{ steps.figure_checker.outcome }}',
           }
 
           # Map outcomes to status icons
