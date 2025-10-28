@@ -2,7 +2,7 @@ name: 'Process Notebooks'
 description: 'Run QA tools on Jupyter notebooks cross-platform'
 inputs:
   command:
-    description: 'Command to run (linter, formatter, pynblint, link_checker, doi_checker, execute)'
+    description: 'Command to run (linter, formatter, pynblint, link_checker, doi_checker, execute, metadata_checker, test_checker, accessibility_checker, figure_checker)'
     required: true
   notebooks:
     description: 'JSON array of notebook paths'
@@ -11,6 +11,10 @@ inputs:
     description: 'List of violations to include when running pynblint (comma-separated)'
     required: false
     default: ''
+  coverage_threshold:
+    description: 'Minimum code coverage percentage for test_checker (default: 80)'
+    required: false
+    default: '80'
 runs:
   using: 'composite'
   steps:
@@ -23,14 +27,18 @@ runs:
         import re
         import subprocess
         import sys
+        import xml.etree.ElementTree as ET
 
         from pathlib import Path
         from ploomber_engine import execute_notebook
 
+        from bs4 import BeautifulSoup
+
         command = "${{ inputs.command }}"
         notebooks_json = """${{ inputs.notebooks }}""".strip()
 
-        valid_commands = ['linter', 'formatter', 'pynblint', 'link_checker', 'doi_checker', 'execute']
+        valid_commands = ['linter', 'formatter', 'pynblint', 'link_checker', 'doi_checker', 'execute',
+                          'metadata_checker', 'test_checker', 'accessibility_checker', 'figure_checker']
         if command not in valid_commands:
             print(f"Error: Invalid command '{command}'")
             print(f"Valid commands: {', '.join(valid_commands)}")
@@ -225,6 +233,316 @@ runs:
                     notebook_results[notebook] = "failure"
                     result = 1
                 # Skip subprocess call for execute
+                continue
+            elif command == "metadata_checker":
+                # Check for version date information in notebook
+                try:
+                    with open(notebook, 'r', encoding='utf-8') as f:
+                        nb_data = json.load(f)
+                except Exception as e:
+                    print(f"❌ Error reading notebook {notebook}: {e}")
+                    notebook_results[notebook] = "failure"
+                    result = 1
+                    continue
+
+                # Date patterns to search for
+                date_patterns = [
+                    r'last\s+updated:?\s*(\d{4}-\d{2}-\d{2})',
+                    r'version:?\s*[\d.]+\s*\((\d{4}-\d{2}-\d{2})\)',
+                    r'modified:?\s*(\d{4}-\d{2}-\d{2})',
+                    r'date:?\s*(\d{4}-\d{2}-\d{2})',
+                    r'updated:?\s*(\d{4}-\d{2}-\d{2})',
+                ]
+
+                found_date = None
+                found_location = None
+
+                # Check notebook metadata
+                metadata = nb_data.get('metadata', {})
+                for field in ['date', 'modified', 'version', 'last_updated']:
+                    if field in metadata:
+                        value = str(metadata[field])
+                        # Try to extract date from the metadata field
+                        for pattern in date_patterns:
+                            match = re.search(pattern, value, re.IGNORECASE)
+                            if match:
+                                found_date = match.group(1)
+                                found_location = f"metadata.{field}"
+                                break
+                        if found_date:
+                            break
+
+                # Check markdown cells if not found in metadata
+                if not found_date:
+                    for cell_idx, cell in enumerate(nb_data.get('cells', [])):
+                        if cell.get('cell_type') == 'markdown':
+                            source = cell.get('source', [])
+                            if isinstance(source, list):
+                                source = ''.join(source)
+
+                            # Search for date patterns
+                            for pattern in date_patterns:
+                                match = re.search(pattern, source, re.IGNORECASE)
+                                if match:
+                                    found_date = match.group(1)
+                                    found_location = f"markdown cell {cell_idx}"
+                                    break
+
+                            if found_date:
+                                break
+
+                # Check for README.md if not found in notebook
+                if not found_date:
+                    readme_path = Path(notebook).parent / "README.md"
+                    if readme_path.exists():
+                        try:
+                            with open(readme_path, 'r', encoding='utf-8') as f:
+                                readme_content = f.read()
+
+                            for pattern in date_patterns:
+                                match = re.search(pattern, readme_content, re.IGNORECASE)
+                                if match:
+                                    found_date = match.group(1)
+                                    found_location = "README.md"
+                                    break
+                        except Exception:
+                            pass
+
+                # Report results
+                if found_date:
+                    print(f"✅ Found version date for {notebook}: {found_date} (in {found_location})")
+                    notebook_results[notebook] = "success"
+                else:
+                    print(f"❌ No version date found for {notebook}")
+                    print(f"   Add 'Last updated: YYYY-MM-DD' to notebook markdown or README.md")
+                    notebook_results[notebook] = "failure"
+                    result = 1
+
+                # Skip subprocess call for metadata_checker
+                continue
+            elif command == "test_checker":
+                # Check for test files and run coverage analysis
+                # This command checks both criteria 2.3.1 (test existence) and 2.3.2 (coverage)
+
+                # PART 1: Check for test files (Criterion 2.3.1)
+                test_patterns = ['test_*.py', '*_test.py', 'tests/**/*.py']
+                test_files = []
+
+                for pattern in test_patterns:
+                    test_files.extend(Path('.').glob(pattern))
+
+                if not test_files:
+                    print(f"❌ No test files found for {notebook}")
+                    print(f"   Create test_*.py or tests/ directory with test files")
+                    notebook_results[notebook] = "failure"
+                    result = 1
+                    continue
+
+                print(f"✅ Found {len(test_files)} test file(s)")
+                for test_file in test_files:
+                    print(f"   - {test_file}")
+
+                # PART 2: Run tests with coverage (Criterion 2.3.2)
+                coverage_threshold = 80.0  # Default threshold
+                coverage_threshold_str = "${{ inputs.coverage_threshold }}".strip()
+                if coverage_threshold_str:
+                    try:
+                        coverage_threshold = float(coverage_threshold_str)
+                    except ValueError:
+                        print(f"Warning: Invalid coverage threshold '{coverage_threshold_str}', using default 80%")
+
+                print(f"\nRunning tests with coverage (threshold: {coverage_threshold}%)...")
+
+                # Run pytest with coverage
+                try:
+                    pytest_result = subprocess.run(
+                        ['pytest', '--cov=.', '--cov-report=xml', '--cov-report=term'],
+                        capture_output=True,
+                        text=True,
+                        timeout=300  # 5 minute timeout
+                    )
+
+                    print(pytest_result.stdout)
+                    if pytest_result.stderr:
+                        print(pytest_result.stderr)
+
+                    # Parse coverage.xml
+                    coverage_xml = Path('coverage.xml')
+                    if not coverage_xml.exists():
+                        print(f"❌ Coverage report not generated")
+                        notebook_results[notebook] = "failure"
+                        result = 1
+                        continue
+
+                    tree = ET.parse('coverage.xml')
+                    root = tree.getroot()
+                    coverage_pct = float(root.attrib.get('line-rate', 0)) * 100
+
+                    print(f"\nCode coverage: {coverage_pct:.1f}%")
+
+                    if coverage_pct < coverage_threshold:
+                        print(f"❌ Coverage {coverage_pct:.1f}% below threshold {coverage_threshold}%")
+                        notebook_results[notebook] = "failure"
+                        result = 1
+                    else:
+                        print(f"✅ Coverage {coverage_pct:.1f}% meets threshold {coverage_threshold}%")
+                        notebook_results[notebook] = "success"
+
+                except subprocess.TimeoutExpired:
+                    print(f"❌ Tests timed out after 5 minutes")
+                    notebook_results[notebook] = "failure"
+                    result = 1
+                except FileNotFoundError:
+                    print(f"❌ pytest not found. Install pytest and pytest-cov")
+                    notebook_results[notebook] = "failure"
+                    result = 1
+                except Exception as e:
+                    print(f"❌ Error running tests: {e}")
+                    notebook_results[notebook] = "failure"
+                    result = 1
+
+                # Skip subprocess call for test_checker
+                continue
+            elif command == "accessibility_checker":
+                # Check for alt-text on all images (Criterion 3.1.3)
+                try:
+                    with open(notebook, 'r', encoding='utf-8') as f:
+                        nb_data = json.load(f)
+                except Exception as e:
+                    print(f"❌ Error reading notebook {notebook}: {e}")
+                    notebook_results[notebook] = "failure"
+                    result = 1
+                    continue
+
+                issues = []
+
+                for cell_idx, cell in enumerate(nb_data.get('cells', [])):
+                    # Check markdown cells for images
+                    if cell.get('cell_type') == 'markdown':
+                        source = cell.get('source', [])
+                        if isinstance(source, list):
+                            source = ''.join(source)
+
+                        # Check HTML img tags
+                        soup = BeautifulSoup(source, 'html.parser')
+                        for img in soup.find_all('img'):
+                            alt = img.get('alt', '').strip()
+                            if not alt:
+                                issues.append(f"Cell {cell_idx}: <img> tag missing alt text")
+
+                        # Check markdown image syntax: ![alt](url)
+                        md_images = re.findall(r'!\[(.*?)\]\([^)]*\)', source)
+                        ref_images = re.findall(r'!\[(.*?)\]\[[^\]]*\]', source)
+                        for idx, alt_text in enumerate(md_images + ref_images):
+                            if not alt_text.strip():
+                                issues.append(f"Cell {cell_idx}: Markdown image missing alt text")
+
+                    # Check output cells for figures
+                    elif cell.get('cell_type') == 'code':
+                        outputs = cell.get('outputs', [])
+                        for output in outputs:
+                            if output.get('output_type') in ['display_data', 'execute_result']:
+                                # Check for image outputs
+                                data = output.get('data', {})
+                                if 'image/png' in data or 'image/jpeg' in data or 'image/jpg' in data:
+                                    metadata = output.get('metadata', {})
+                                    # Check for alt text in metadata
+                                    if not metadata.get('alt_text') and not metadata.get('alt'):
+                                        issues.append(f"Cell {cell_idx}: Figure output missing alt text metadata")
+
+                # Report results
+                if not issues:
+                    print(f"✅ All images have alt-text in {notebook}")
+                    notebook_results[notebook] = "success"
+                else:
+                    print(f"❌ Found {len(issues)} accessibility issue(s) in {notebook}:")
+                    for issue in issues:
+                        print(f"   - {issue}")
+                    print(f"\nAdd alt-text to all images for screen reader compatibility")
+                    notebook_results[notebook] = "failure"
+                    result = 1
+
+                # Skip subprocess call for accessibility_checker
+                continue
+            elif command == "figure_checker":
+                # Check for figure labels and source attribution (Criterion 3.3.2)
+                try:
+                    with open(notebook, 'r', encoding='utf-8') as f:
+                        nb_data = json.load(f)
+                except Exception as e:
+                    print(f"❌ Error reading notebook {notebook}: {e}")
+                    notebook_results[notebook] = "failure"
+                    result = 1
+                    continue
+
+                issues = []
+
+                # Source attribution patterns
+                source_patterns = [
+                    r'source:?\s+\S+',
+                    r'data\s+from:?\s*',
+                    r'doi:?\s*10\.\d+',
+                    r'https?://\S+',
+                    r'credit:?\s*',
+                    r'attribution:?\s*',
+                    r'reference:?\s*',
+                    r'dataset:?\s*',
+                ]
+
+                cells = nb_data.get('cells', [])
+
+                for cell_idx, cell in enumerate(cells):
+                    if cell.get('cell_type') == 'code':
+                        outputs = cell.get('outputs', [])
+
+                        for output in outputs:
+                            if output.get('output_type') in ['display_data', 'execute_result']:
+                                data = output.get('data', {})
+
+                                # Check if this is a figure output
+                                if 'image/png' in data or 'image/jpeg' in data or 'image/jpg' in data:
+                                    # Check nearby markdown cells for source attribution
+                                    has_source = False
+
+                                    # Check 2 cells before and after
+                                    for offset in [-2, -1, 1, 2]:
+                                        check_idx = cell_idx + offset
+                                        if 0 <= check_idx < len(cells):
+                                            check_cell = cells[check_idx]
+                                            if check_cell.get('cell_type') == 'markdown':
+                                                source = check_cell.get('source', [])
+                                                if isinstance(source, list):
+                                                    source = ''.join(source)
+
+                                                # Check for source patterns
+                                                for pattern in source_patterns:
+                                                    if re.search(pattern, source, re.IGNORECASE):
+                                                        has_source = True
+                                                        break
+
+                                            if has_source:
+                                                break
+
+                                    if not has_source:
+                                        issues.append(
+                                            f"Cell {cell_idx}: Figure missing source attribution "
+                                            f"(expected in nearby markdown cell)"
+                                        )
+
+                # Report results
+                if not issues:
+                    print(f"✅ All figures have proper labels and sources in {notebook}")
+                    notebook_results[notebook] = "success"
+                else:
+                    print(f"❌ Found {len(issues)} figure labeling issue(s) in {notebook}:")
+                    for issue in issues:
+                        print(f"   - {issue}")
+                    print(f"\nAdd source attribution in markdown cells near figures")
+                    print(f"Expected patterns: 'Source:', 'Data from:', DOI, URL, 'Credit:', etc.")
+                    notebook_results[notebook] = "failure"
+                    result = 1
+
+                # Skip subprocess call for figure_checker
                 continue
 
             try:
