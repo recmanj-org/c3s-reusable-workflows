@@ -32,6 +32,11 @@ runs:
         from pathlib import Path
         from ploomber_engine import execute_notebook
 
+        try:
+            from bs4 import BeautifulSoup
+        except ImportError:
+            BeautifulSoup = None
+
         command = "${{ inputs.command }}"
         notebooks_json = """${{ inputs.notebooks }}""".strip()
 
@@ -400,6 +405,72 @@ runs:
                     result = 1
 
                 # Skip subprocess call for test_checker
+                continue
+            elif command == "accessibility_checker":
+                # Check for alt-text on all images (Criterion 3.1.3)
+                if BeautifulSoup is None:
+                    print(f"❌ BeautifulSoup not installed. Install beautifulsoup4 and lxml")
+                    notebook_results[notebook] = "failure"
+                    result = 1
+                    continue
+
+                try:
+                    with open(notebook, 'r', encoding='utf-8') as f:
+                        nb_data = json.load(f)
+                except Exception as e:
+                    print(f"❌ Error reading notebook {notebook}: {e}")
+                    notebook_results[notebook] = "failure"
+                    result = 1
+                    continue
+
+                issues = []
+
+                for cell_idx, cell in enumerate(nb_data.get('cells', [])):
+                    # Check markdown cells for images
+                    if cell.get('cell_type') == 'markdown':
+                        source = cell.get('source', [])
+                        if isinstance(source, list):
+                            source = ''.join(source)
+
+                        # Check HTML img tags
+                        soup = BeautifulSoup(source, 'html.parser')
+                        for img in soup.find_all('img'):
+                            alt = img.get('alt', '').strip()
+                            if not alt:
+                                issues.append(f"Cell {cell_idx}: <img> tag missing alt text")
+
+                        # Check markdown image syntax: ![alt](url)
+                        md_images = re.findall(r'!\[(.*?)\]\(.*?\)', source)
+                        for idx, alt_text in enumerate(md_images):
+                            if not alt_text.strip():
+                                issues.append(f"Cell {cell_idx}: Markdown image missing alt text")
+
+                    # Check output cells for figures
+                    elif cell.get('cell_type') == 'code':
+                        outputs = cell.get('outputs', [])
+                        for output in outputs:
+                            if output.get('output_type') in ['display_data', 'execute_result']:
+                                # Check for image outputs
+                                data = output.get('data', {})
+                                if 'image/png' in data or 'image/jpeg' in data or 'image/jpg' in data:
+                                    metadata = output.get('metadata', {})
+                                    # Check for alt text in metadata
+                                    if not metadata.get('alt_text') and not metadata.get('alt'):
+                                        issues.append(f"Cell {cell_idx}: Figure output missing alt text metadata")
+
+                # Report results
+                if not issues:
+                    print(f"✅ All images have alt-text in {notebook}")
+                    notebook_results[notebook] = "success"
+                else:
+                    print(f"❌ Found {len(issues)} accessibility issue(s) in {notebook}:")
+                    for issue in issues:
+                        print(f"   - {issue}")
+                    print(f"\nAdd alt-text to all images for screen reader compatibility")
+                    notebook_results[notebook] = "failure"
+                    result = 1
+
+                # Skip subprocess call for accessibility_checker
                 continue
 
             try:
