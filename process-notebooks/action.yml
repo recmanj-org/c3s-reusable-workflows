@@ -90,6 +90,7 @@ runs:
                     subprocess.run(cmd, check=True)
                     notebook_results[notebook] = "success"
                 except subprocess.CalledProcessError:
+                    notebook_results[notebook] = "failure"
                     result = 1
                 # Results are written by the checker script, skip default processing
                 continue
@@ -142,6 +143,7 @@ runs:
                     subprocess.run(cmd, check=True)
                     notebook_results[notebook] = "success"
                 except subprocess.CalledProcessError:
+                    notebook_results[notebook] = "failure"
                     result = 1
                 # Results are written by the checker script, skip default processing
                 continue
@@ -159,6 +161,7 @@ runs:
                     subprocess.run(cmd, check=True)
                     notebook_results[notebook] = "success"
                 except subprocess.CalledProcessError:
+                    notebook_results[notebook] = "failure"
                     result = 1
                 # Results are written by the checker script, skip default processing
                 continue
@@ -174,6 +177,7 @@ runs:
                     subprocess.run(cmd, check=True)
                     notebook_results[notebook] = "success"
                 except subprocess.CalledProcessError:
+                    notebook_results[notebook] = "failure"
                     result = 1
                 # Results are written by the checker script, skip default processing
                 continue
@@ -189,6 +193,7 @@ runs:
                     subprocess.run(cmd, check=True)
                     notebook_results[notebook] = "success"
                 except subprocess.CalledProcessError:
+                    notebook_results[notebook] = "failure"
                     result = 1
                 # Results are written by the checker script, skip default processing
                 continue

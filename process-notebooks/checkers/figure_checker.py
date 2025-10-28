@@ -7,7 +7,6 @@ Checks for figure labels and source attribution (Criterion 3.3.2).
 
 import argparse
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -90,8 +89,8 @@ def check_figures(notebook_path: str) -> str:
         print(f"❌ Found {len(issues)} figure labeling issue(s) in {notebook_path}:")
         for issue in issues:
             print(f"   - {issue}")
-        print(f"\nAdd source attribution in markdown cells near figures")
-        print(f"Expected patterns: 'Source:', 'Data from:', DOI, URL, 'Credit:', etc.")
+        print("\nAdd source attribution in markdown cells near figures")
+        print("Expected patterns: 'Source:', 'Data from:', DOI, URL, 'Credit:', etc.")
         return "failure"
 
 

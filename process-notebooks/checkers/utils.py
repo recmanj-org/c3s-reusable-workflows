@@ -3,7 +3,7 @@
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List, Any, Union
+from typing import Dict, Any
 
 
 def read_notebook(notebook_path: str) -> Dict[str, Any]:
@@ -62,5 +62,3 @@ def write_results(command_name: str, notebook_results: Dict[str, str], output_di
 
     with open(results_file, 'w') as f:
         json.dump(results_data, f, indent=2)
-
-    print(f"\nResults written to {results_file}")

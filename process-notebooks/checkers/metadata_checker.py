@@ -7,7 +7,6 @@ Checks for version date information in notebooks or README files.
 
 import argparse
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -98,7 +97,7 @@ def check_metadata(notebook_path: str, check_readme: bool = True) -> str:
         return "success"
     else:
         print(f"❌ No version date found for {notebook_path}")
-        print(f"   Add 'Last updated: YYYY-MM-DD' to notebook markdown or README.md")
+        print("   Add 'Last updated: YYYY-MM-DD' to notebook markdown or README.md")
         return "failure"
 
 

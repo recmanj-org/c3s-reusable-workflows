@@ -7,7 +7,6 @@ Checks if notebooks that use datasets with DOI metadata properly cite those DOIs
 
 import argparse
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -122,9 +121,9 @@ def check_doi(notebook_path: str) -> str:
 
     if not valid_dois:
         print(f"ERROR: No valid DOI found in {notebook_path}")
-        print(f"  Notebook uses dataset with DOI metadata but doesn't cite the DOI")
-        print(f"  Please add DOI citation in markdown or ensure dataset metadata is visible")
-        print(f"  Expected format: 10.xxxx/xxxxx")
+        print("  Notebook uses dataset with DOI metadata but doesn't cite the DOI")
+        print("  Please add DOI citation in markdown or ensure dataset metadata is visible")
+        print("  Expected format: 10.xxxx/xxxxx")
         return "failure"
     else:
         print(f"Found {len(valid_dois)} valid DOI(s) in {notebook_path}:")

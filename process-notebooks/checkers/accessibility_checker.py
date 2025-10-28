@@ -12,12 +12,7 @@ import re
 import sys
 from pathlib import Path
 
-try:
-    from bs4 import BeautifulSoup
-except ImportError:
-    print("❌ Error: BeautifulSoup4 is not installed")
-    print("   Install it with: pip install beautifulsoup4")
-    sys.exit(1)
+from bs4 import BeautifulSoup
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
@@ -79,7 +74,7 @@ def check_accessibility(notebook_path: str) -> str:
         print(f"❌ Found {len(issues)} accessibility issue(s) in {notebook_path}:")
         for issue in issues:
             print(f"   - {issue}")
-        print(f"\nAdd alt-text to all images for screen reader compatibility")
+        print("\nAdd alt-text to all images for screen reader compatibility")
         return "failure"
 
 

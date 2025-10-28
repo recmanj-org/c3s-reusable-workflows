@@ -8,7 +8,6 @@ Validates criteria 2.3.1 (test existence) and 2.3.2 (coverage threshold).
 
 import argparse
 import json
-import os
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -39,7 +38,7 @@ def check_tests(notebook_path: str, coverage_threshold: float = 80.0) -> str:
 
     if not test_files:
         print(f"❌ No test files found for {notebook_path}")
-        print(f"   Create test_*.py or tests/ directory with test files")
+        print("   Create test_*.py or tests/ directory with test files")
         return "failure"
 
     print(f"✅ Found {len(test_files)} test file(s)")
@@ -65,7 +64,7 @@ def check_tests(notebook_path: str, coverage_threshold: float = 80.0) -> str:
         # Parse coverage.xml
         coverage_xml = Path('coverage.xml')
         if not coverage_xml.exists():
-            print(f"❌ Coverage report not generated")
+            print("❌ Coverage report not generated")
             return "failure"
 
         tree = ET.parse('coverage.xml')
@@ -82,13 +81,13 @@ def check_tests(notebook_path: str, coverage_threshold: float = 80.0) -> str:
             return "success"
 
     except subprocess.TimeoutExpired:
-        print(f"❌ Tests timed out after 5 minutes")
+        print("❌ Tests timed out after 5 minutes")
         return "failure"
     except FileNotFoundError:
-        print(f"❌ pytest not found. Install pytest and pytest-cov")
+        print("❌ pytest not found. Install pytest and pytest-cov")
         return "failure"
     except Exception as e:
-        print(f"❌ Error running tests: {e}")
+        print("❌ Error running tests: {e}")
         return "failure"
 
 
