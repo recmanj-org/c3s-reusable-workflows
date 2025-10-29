@@ -8,7 +8,31 @@ on:
         required: false
         type: string
         default: ''
-
+      pr-number:
+        description: 'Pull request number (for Jira issue tracking)'
+        required: false
+        type: string
+      pr-title:
+        description: 'Pull request title (for Jira issue summary)'
+        required: false
+        type: string
+      pr-url:
+        description: 'Pull request URL (for Jira issue description)'
+        required: false
+        type: string
+    secrets:
+      CDSAPI_KEY:
+        description: 'CDS API key for notebook execution'
+        required: false
+      JIRA_API_TOKEN:
+        description: 'Jira API token for authentication'
+        required: false
+      JIRA_HOST:
+        description: 'Jira instance URL (e.g., https://your-domain.atlassian.net)'
+        required: false
+      JIRA_PROJECT_KEY:
+        description: 'Jira project key (e.g., CDSQA)'
+        required: false
 
 jobs:
   checks:
@@ -406,3 +430,132 @@ jobs:
           github_summary = os.getenv('GITHUB_STEP_SUMMARY')
           with open(github_summary, 'a') as f:
               f.write(summary_text)
+
+      - name: Install Jira CLI
+        if: always() && inputs.pr-number != '' && secrets.JIRA_API_TOKEN != '' && secrets.JIRA_HOST != '' && secrets.JIRA_PROJECT_KEY != ''
+        run: |
+          echo "Installing Jira CLI v1.7.0..."
+
+          wget -q https://github.com/ankitpokhrel/jira-cli/releases/download/v1.7.0/jira_1.7.0_linux_x86_64.tar.gz
+
+          tar -xzf jira_1.7.0_linux_x86_64.tar.gz
+          sudo mv bin/jira /usr/local/bin/
+          sudo chmod +x /usr/local/bin/jira
+
+          jira version
+
+          echo "Jira CLI installed successfully"
+
+      - name: Configure Jira CLI
+        if: always() && inputs.pr-number != '' && secrets.JIRA_API_TOKEN != '' && secrets.JIRA_HOST != '' && secrets.JIRA_PROJECT_KEY != ''
+        run: |
+          echo "Configuring Jira CLI..."
+
+          cat > ~/.jira.yml << EOF
+          installation: Cloud
+          project:
+            key: ${{ secrets.JIRA_PROJECT_KEY }}
+          server: ${{ secrets.JIRA_HOST }}
+          auth_type: bearer
+          EOF
+
+          echo "Jira CLI configured successfully"
+
+      - name: Create or Update Jira Issue
+        if: always() && inputs.pr-number != '' && secrets.JIRA_API_TOKEN != '' && secrets.JIRA_HOST != '' && secrets.JIRA_PROJECT_KEY != ''
+        env:
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+        run: |
+          echo "Processing Jira issue for ${{ github.repository }} PR #${{ inputs.pr-number }}..."
+
+          QA_OUTPUT_DIR="${{ env.QA_OUTPUT_DIR }}"
+          HAS_FAILURES=false
+          FAILED_CHECKS=""
+
+          if [ -d "$QA_OUTPUT_DIR" ]; then
+            for result_file in "$QA_OUTPUT_DIR"/*-results.json; do
+              if [ -f "$result_file" ]; then
+                command_name=$(jq -r '.command // "unknown"' "$result_file")
+
+                failures=$(jq -r '.results | to_entries[] | select(.value == "failure") | .key' "$result_file")
+
+                if [ -n "$failures" ]; then
+                  HAS_FAILURES=true
+                  failure_count=$(echo "$failures" | wc -l)
+                  FAILED_CHECKS="${FAILED_CHECKS}- ${command_name}: ${failure_count} notebook(s) failed\n"
+                fi
+              fi
+            done
+          fi
+
+          WORKFLOW_RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          CURRENT_DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+          JQL="project = ${{ secrets.JIRA_PROJECT_KEY }} AND summary ~ \"${{ github.repository }} PR #${{ inputs.pr-number }}\" AND statusCategory != Done"
+          echo "Searching for existing issue with JQL: $JQL"
+
+          EXISTING_ISSUE=$(jira issue list --jql "$JQL" --plain --no-headers --columns KEY 2>/dev/null | head -n 1 || true)
+
+          if [ "$HAS_FAILURES" = true ]; then
+            COMMENT_BODY="❌ **Workflow Run Failed**
+
+**Run**: ${WORKFLOW_RUN_URL}
+**Date**: ${CURRENT_DATE}
+
+**Failed Checks**:
+$(echo -e "$FAILED_CHECKS")
+
+**Details**: See workflow run for complete logs."
+
+            if [ -n "$EXISTING_ISSUE" ]; then
+              echo "Updating existing issue: $EXISTING_ISSUE"
+              jira issue comment add "$EXISTING_ISSUE" "$COMMENT_BODY"
+              echo "Comment added to issue $EXISTING_ISSUE"
+            else
+              echo "Creating new Jira issue..."
+
+              ISSUE_SUMMARY="Notebook QA Failed - ${{ github.repository }} PR #${{ inputs.pr-number }}: ${{ inputs.pr-title }}"
+              ISSUE_DESCRIPTION="Automated issue created by notebook-qa workflow.
+
+**Workflow Run**: ${WORKFLOW_RUN_URL}
+**Pull Request**: ${{ inputs.pr-url }}
+**Repository**: ${{ github.repository }}
+**Branch**: ${{ github.ref_name }}"
+
+              NEW_ISSUE=$(jira issue create \
+                --type Bug \
+                --summary "$ISSUE_SUMMARY" \
+                --body "$ISSUE_DESCRIPTION" \
+                --priority Medium \
+                --label notebook-qa \
+                --label automated \
+                --label github-actions \
+                --plain --no-input 2>&1 | grep -oE '[A-Z]+-[0-9]+' | head -n 1 || true)
+
+              if [ -n "$NEW_ISSUE" ]; then
+                echo "Created Jira issue: $NEW_ISSUE"
+
+                jira issue comment add "$NEW_ISSUE" "$COMMENT_BODY"
+                echo "Added failure details to $NEW_ISSUE"
+              else
+                echo "Warning: Failed to create Jira issue"
+              fi
+            fi
+          else
+            SUCCESS_COMMENT="✅ **Workflow Run Succeeded**
+
+**Run**: ${WORKFLOW_RUN_URL}
+**Date**: ${CURRENT_DATE}
+
+All checks passed successfully."
+
+            if [ -n "$EXISTING_ISSUE" ]; then
+              echo "Workflow passed. Adding success comment to existing issue: $EXISTING_ISSUE"
+              jira issue comment add "$EXISTING_ISSUE" "$SUCCESS_COMMENT"
+              echo "Success comment added to issue $EXISTING_ISSUE"
+            else
+              echo "Workflow passed and no existing issue found. No action needed."
+            fi
+          fi
+
+          echo "Jira issue processing completed"
