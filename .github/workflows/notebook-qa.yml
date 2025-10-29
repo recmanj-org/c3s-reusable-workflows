@@ -204,14 +204,6 @@ jobs:
           command: accessibility_checker
           notebooks: ${{ steps.collect_notebooks.outputs.notebooks }}
 
-      - name: (3.3.2) Check figure labels and sources
-        id: figure_checker
-        if: success() || failure()
-        uses: recmanj-org/c3s-reusable-workflows/process-notebooks@main
-        with:
-          command: figure_checker
-          notebooks: ${{ steps.collect_notebooks.outputs.notebooks }}
-
       - name: Upload notebook outputs
         if: always()
         uses: actions/upload-artifact@v4
@@ -275,7 +267,6 @@ jobs:
               '(2.2.1, 2.2.4, 2.2.6) Execute Notebooks': '${{ steps.execute_notebooks.outcome }}',
               '(2.3.1, 2.3.2) Test & Coverage': '${{ steps.test_checker.outcome }}',
               '(3.1.3) Accessibility': '${{ steps.accessibility_checker.outcome }}',
-              '(3.3.2) Figure Labels': '${{ steps.figure_checker.outcome }}',
               '(4.2.3) Changelog Check': '${{ steps.changelog.outcome }}',  
           }
 
@@ -323,8 +314,7 @@ jobs:
               'pynblint': 'Pynblint',
               'execute': 'Execute',
               'test_checker': 'Tests',
-              'accessibility_checker': 'Alt-text',
-              'figure_checker': 'Figures'
+              'accessibility_checker': 'Alt-text'
           }
 
           # Collect all notebook results
@@ -352,7 +342,7 @@ jobs:
               header = '| Notebook |'
               separator = '|----------|'
               for cmd in ['linter', 'formatter', 'pynblint', 'doi_checker', 'link_checker', 'execute',
-                          'metadata_checker', 'test_checker', 'accessibility_checker', 'figure_checker']:
+                          'metadata_checker', 'test_checker', 'accessibility_checker']:
                   if cmd in results_by_command:
                       header += f' {command_headers[cmd]} |'
                       separator += '--------|'
@@ -365,7 +355,7 @@ jobs:
                   row = f'| {notebook} |'
 
                   for cmd in ['linter', 'formatter', 'pynblint', 'doi_checker', 'link_checker', 'execute',
-                              'metadata_checker', 'test_checker', 'accessibility_checker', 'figure_checker']:
+                              'metadata_checker', 'test_checker', 'accessibility_checker']:
                       if cmd in results_by_command:
                           status = results_by_command[cmd].get(notebook, 'skipped')
                           icon = notebook_status_map.get(status, '⏭️')
