@@ -15,6 +15,18 @@ inputs:
     description: 'Minimum code coverage percentage for test_checker (default: 80)'
     required: false
     default: '80'
+  check_axis_labels:
+    description: 'Check for axis labels in figures (default: true)'
+    required: false
+    default: 'true'
+  require_xlabel:
+    description: 'Require x-axis labels on plots (default: true)'
+    required: false
+    default: 'true'
+  require_ylabel:
+    description: 'Require y-axis labels on plots (default: true)'
+    required: false
+    default: 'true'
 runs:
   using: 'composite'
   steps:
@@ -177,11 +189,18 @@ runs:
                 # Results are written by the checker script, skip default processing
                 continue
             elif command == "figure_checker":
+                # Call external checker script
+                check_axis_labels = "${{ inputs.check_axis_labels }}".strip() or 'true'
+                require_xlabel = "${{ inputs.require_xlabel }}".strip() or 'true'
+                require_ylabel = "${{ inputs.require_ylabel }}".strip() or 'true'
                 cmd = [
                     'python3',
                     os.path.join(action_path, 'checkers', 'figure_checker.py'),
                     '--notebooks', json.dumps([notebook]),
-                    '--output-dir', output_dir
+                    '--output-dir', output_dir,
+                    '--check-axis-labels', check_axis_labels,
+                    '--require-xlabel', require_xlabel,
+                    '--require-ylabel', require_ylabel
                 ]
                 try:
                     subprocess.run(cmd, check=True)
